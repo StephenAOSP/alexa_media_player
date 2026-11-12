@@ -14,6 +14,7 @@ import logging
 from typing import Any, Callable
 from urllib.parse import urlparse
 
+from aiohttp import ClientError
 from alexapy import AlexaAPI, AlexapyLoginError, hide_email
 from alexapy.errors import AlexapyConnectionError, AlexapyTooManyRequestsError
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
@@ -834,7 +835,7 @@ class AlexaMediaServices:
             candidates = await probe_public_music_search(
                 session, marketplace=marketplace, query=query
             )
-        except (ValueError, OSError, asyncio.TimeoutError) as err:
+        except (ClientError, ValueError, OSError, asyncio.TimeoutError) as err:
             raise HomeAssistantError(
                 "Public Amazon Music search was unavailable"
             ) from err
