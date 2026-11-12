@@ -668,3 +668,56 @@ async def test_music_resolver_never_queries_new_radio_selections():
     ):
         await services.resolve_music_alarm_asset(login, "Global Player", "Radio X UK")
     lookup.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_search_music_catalog_returns_account_marketplace_candidates():
+    """Expose a read-only public catalogue probe without creating alarms."""
+    from custom_components.alexa_media.amazon_music_public import (
+        PublicMusicSearchCandidate,
+    )
+
+    services, login, _ = make_services()
+    login.url = "amazon.co.uk"
+    services._resolve_alarm_device = MagicMock(
+        return_value=(login, SERIAL, DEVICE_TYPE, None)
+    )
+    candidate = PublicMusicSearchCandidate(
+        name="Enya",
+        kind="artist",
+        catalog_id="B001ED54MQ",
+        url="https://music.amazon.co.uk/artists/B001ED54MQ/enya",
+        exact_name_match=True,
+    )
+    with (
+        patch(
+            "custom_components.alexa_media.services.probe_public_music_search",
+            new_callable=AsyncMock,
+            return_value=[candidate],
+        ) as probe,
+        patch(
+            "custom_components.alexa_media.services.async_get_clientsession"
+        ) as get_session,
+        patch.object(AlexaAPI, "create_alarm", autospec=True) as create,
+        patch.object(AlexaAPI, "play_music", autospec=True) as play,
+    ):
+        result = await services.search_music_catalog(call(query="Enya"))
+
+    assert result["marketplace"] == "amazon.co.uk"
+    assert result["candidates"][0]["catalog_id"] == "B001ED54MQ"
+    probe.assert_awaited_once_with(
+        get_session.return_value, marketplace="amazon.co.uk", query="Enya"
+    )
+    create.assert_not_called()
+    play.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_search_music_catalog_rejects_unknown_account_marketplace():
+    services, login, _ = make_services()
+    login.url = "example.org"
+    services._resolve_alarm_device = MagicMock(
+        return_value=(login, SERIAL, DEVICE_TYPE, None)
+    )
+    with pytest.raises(ServiceValidationError, match="marketplace"):
+        await services.search_music_catalog(call(query="Enya"))
