@@ -446,3 +446,117 @@ def test_music_asset_store_is_private():
         services._music_store(login)
 
     assert store.call_args.kwargs["private"] is True
+
+
+MUSIC_ALARM_ID = "11111111-1111-4111-8111-111111111111"
+
+
+@pytest.mark.asyncio
+async def test_music_resolver_uses_learned_asset_before_lookup():
+    """Existing alarm selections must not trigger a provider lookup."""
+    services, login, _ = make_services()
+    provider_lookup = AsyncMock(return_value=None)
+    services._functions["resolve_music_alarm_asset"] = provider_lookup
+    with patch.object(
+        services,
+        "_learn_music_assets",
+        new_callable=AsyncMock,
+        return_value={services._music_key("Amazon Music", "Enya"): MUSIC_ALARM_ID},
+    ):
+        assert (
+            await services.resolve_music_alarm_asset(login, "Amazon Music", "Enya")
+            == MUSIC_ALARM_ID
+        )
+    provider_lookup.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_music_resolver_accepts_verified_new_asset():
+    """A future read-only provider adapter can return a native alarm identifier."""
+    services, login, _ = make_services()
+    lookup = AsyncMock(return_value=MUSIC_ALARM_ID)
+    services._functions["resolve_music_alarm_asset"] = lookup
+    with patch.object(
+        services, "_learn_music_assets", new_callable=AsyncMock, return_value={}
+    ):
+        result = await services.resolve_music_alarm_asset(
+            login, "Amazon Music", "Enya"
+        )
+    assert result == MUSIC_ALARM_ID
+    lookup.assert_awaited_once_with(login, "Amazon Music", "Enya")
+
+
+@pytest.mark.asyncio
+async def test_music_resolver_rejects_unknown_selection_without_playback():
+    """Never create an alarm or start playback if no music identifier exists."""
+    services, login, _ = make_services()
+    with (
+        patch.object(
+            services, "_learn_music_assets", new_callable=AsyncMock, return_value={}
+        ),
+        patch.object(AlexaAPI, "play_music", autospec=True) as playback,
+        patch.object(AlexaAPI, "create_alarm", autospec=True) as create,
+        pytest.raises(ServiceValidationError, match="read-only lookup"),
+    ):
+        await services.create_alarm(
+            call(
+                time=datetime.time(8, 15),
+                days=[],
+                alarm_type="music",
+                music_entity="Enya",
+                music_provider="Amazon Music",
+            )
+        )
+    playback.assert_not_called()
+    create.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_music_resolver_rejects_catalogue_or_invalid_asset_id():
+    """A provider lookup cannot pass arbitrary playback IDs into Alexa alarms."""
+    services, login, _ = make_services()
+    services._functions["resolve_music_alarm_asset"] = AsyncMock(
+        return_value="catalogue:enya:artist"
+    )
+    with (
+        patch.object(
+            services, "_learn_music_assets", new_callable=AsyncMock, return_value={}
+        ),
+        pytest.raises(ServiceValidationError, match="identifier is invalid"),
+    ):
+        await services.resolve_music_alarm_asset(login, "Amazon Music", "Enya")
+
+
+@pytest.mark.asyncio
+async def test_music_resolver_creates_alarm_with_verified_new_asset():
+    """Only a verified native asset ID reaches the alarm creation API."""
+    services, login, schedule = make_services()
+    services._functions["resolve_music_alarm_asset"] = AsyncMock(
+        return_value=MUSIC_ALARM_ID
+    )
+    with (
+        patch.object(
+            services, "_learn_music_assets", new_callable=AsyncMock, return_value={}
+        ),
+        patch.object(
+            AlexaAPI, "create_alarm", autospec=True, return_value=True
+        ) as create,
+    ):
+        assert await services.create_alarm(
+            call(
+                time=datetime.time(8, 15),
+                days=[],
+                alarm_type="music",
+                music_entity="Enya",
+                music_provider="Amazon Music",
+            )
+        )
+    create.assert_awaited_once_with(
+        login,
+        SERIAL,
+        DEVICE_TYPE,
+        "2026-10-20T08:15:00",
+        None,
+        f"MUSIC-{MUSIC_ALARM_ID}",
+    )
+    schedule.assert_called_once()
