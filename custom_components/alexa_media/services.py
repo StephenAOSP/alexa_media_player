@@ -49,7 +49,7 @@ from .const import (
     SERVICE_UPDATE_LAST_CALLED,
 )
 from .helpers import _catch_login_errors, report_relogin_required, safe_get
-from .amazon_music_graphql import probe_anonymous_graphql
+from .amazon_music_graphql import probe_existing_alexa_session
 
 _LOGGER = logging.getLogger(__name__)
 _MUSIC_ASSET_LOCKS: dict[str, asyncio.Lock] = {}
@@ -815,14 +815,8 @@ class AlexaMediaServices:
         )
 
     async def search_music_catalog(self, call: ServiceCall) -> dict[str, Any]:
-        """Probe anonymous GraphQL search without Alexa credentials or playback.
-
-        An authenticated website capture showed the response structure, but
-        anonymous access is not yet confirmed. No alarm is ever created here.
-        """
-        login_obj, _, _, _ = self._resolve_alarm_device(
-            call.data[ATTR_ENTITY_ID]
-        )
+        """Test existing AlexaPy session for read-only Amazon Music search."""
+        login_obj, _, _, _ = self._resolve_alarm_device(call.data[ATTR_ENTITY_ID])
         marketplace = self._amazon_account_marketplace(login_obj)
         if marketplace is None:
             raise ServiceValidationError(
@@ -830,33 +824,33 @@ class AlexaMediaServices:
             )
         query = call.data["query"].strip()
         try:
-            diagnostic = await probe_anonymous_graphql(
-                marketplace=marketplace, query=query
+            diagnostic = await probe_existing_alexa_session(
+                session=login_obj.session, marketplace=marketplace, query=query
             )
         except (ClientError, ValueError, OSError, asyncio.TimeoutError) as err:
-            _LOGGER.debug("Anonymous music catalogue probe failed: %s", type(err).__name__)
-            diagnostic = {
-                "outcome": "network_or_timeout_error",
-                "candidates": [],
-            }
+            _LOGGER.debug(
+                "Existing Alexa session music probe failed: %s", type(err).__name__
+            )
+            diagnostic = {"outcome": "network_or_timeout_error", "candidates": []}
         return {
             "marketplace": marketplace,
             "query": query,
             "diagnostics": {
-                "transport": "anonymous_graphql",
+                "transport": "existing_alexapy_session",
                 "operation": "SpecSearchPage",
                 "http_status": diagnostic.get("http_status"),
                 "content_type": diagnostic.get("content_type"),
                 "outcome": diagnostic.get("outcome"),
+                "applicable_cookie_count": diagnostic.get("applicable_cookie_count"),
                 "error_count": diagnostic.get("error_count", 0),
                 "error_codes": diagnostic.get("error_codes", []),
             },
             "candidates": diagnostic.get("candidates", []),
             "note": (
-                "Read-only anonymous GraphQL test. No Amazon cookies, API keys, "
-                "CSRF tokens, or Alexa credentials are sent. An empty result "
-                "does not prove content is absent. Catalogue IDs cannot be "
-                "passed directly as native musicAlarmIds."
+                "Read-only research request using existing AlexaPy session. "
+                "No credentials copied or saved, and no playback or alarm created. "
+                "An empty or rejected response does not prove music is unavailable. "
+                "Catalogue IDs are not native musicAlarmIds."
             ),
         }
 
