@@ -560,3 +560,55 @@ async def test_music_resolver_creates_alarm_with_verified_new_asset():
         f"MUSIC-{MUSIC_ALARM_ID}",
     )
     schedule.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_music_alarm_metadata_inspection_is_read_only():
+    """Only safe metadata and hashed identifiers are returned."""
+    music_id = "11111111-1111-4111-8111-111111111111"
+    alarm = {
+        "provider": "Amazon Music",
+        "musicEntity": "Enya",
+        "musicAlarmId": music_id,
+        "status": "ON",
+        "recurringPattern": None,
+        "notificationIndex": "private-alarm-id",
+    }
+    services, login, _ = make_services(alarm)
+    services._resolve_alarm_device = MagicMock(
+        return_value=(login, SERIAL, DEVICE_TYPE, None)
+    )
+    with (
+        patch.object(
+            AlexaAPI, "create_alarm", autospec=True
+        ) as create,
+        patch.object(
+            AlexaAPI, "play_music", autospec=True
+        ) as play,
+        patch.object(services, "_music_store") as store,
+    ):
+        result = await services.inspect_music_alarm_metadata(call())
+
+    assert result["cached_music_alarm_count"] == 1
+    entry = result["alarms"][0]
+    assert entry["music_entity"] == "Enya"
+    assert entry["provider"] == "Amazon Music"
+    assert entry["music_id_present"] is True
+    assert entry["music_id_uuid_format"] is True
+    assert len(entry["music_id_fingerprint"]) == 16
+    assert music_id not in str(result)
+    assert "private-alarm-id" not in str(result)
+    store.assert_not_called()
+    create.assert_not_called()
+    play.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_music_alarm_metadata_inspection_empty_cache():
+    services, login, _ = make_services({})
+    services._resolve_alarm_device = MagicMock(
+        return_value=(login, SERIAL, DEVICE_TYPE, None)
+    )
+    result = await services.inspect_music_alarm_metadata(call())
+    assert result["cached_music_alarm_count"] == 0
+    assert result["alarms"] == []
