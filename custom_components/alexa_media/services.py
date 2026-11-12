@@ -50,6 +50,7 @@ from .const import (
     SERVICE_UPDATE_LAST_CALLED,
 )
 from .helpers import _catch_login_errors, report_relogin_required, safe_get
+from .amazon_music_graphql import probe_anonymous_graphql
 from .amazon_music_public import probe_public_music_search
 
 _LOGGER = logging.getLogger(__name__)
@@ -816,10 +817,10 @@ class AlexaMediaServices:
         )
 
     async def search_music_catalog(self, call: ServiceCall) -> dict[str, Any]:
-        """Probe a public music search page; return observed catalogue links only.
+        """Probe anonymous GraphQL search without Alexa credentials or playback.
 
-        This experimental diagnostic never creates an alarm or starts playback.
-        A missing result is not proof the content is absent from Amazon Music.
+        An authenticated website capture showed the response structure, but
+        anonymous access is not yet confirmed. No alarm is ever created here.
         """
         login_obj, _, _, _ = self._resolve_alarm_device(
             call.data[ATTR_ENTITY_ID]
@@ -830,32 +831,34 @@ class AlexaMediaServices:
                 "Amazon marketplace not available for this Alexa account"
             )
         query = call.data["query"].strip()
-        session = async_get_clientsession(self.hass)
         try:
-            candidates = await probe_public_music_search(
-                session, marketplace=marketplace, query=query
+            diagnostic = await probe_anonymous_graphql(
+                marketplace=marketplace, query=query
             )
         except (ClientError, ValueError, OSError, asyncio.TimeoutError) as err:
-            raise HomeAssistantError(
-                "Public Amazon Music search was unavailable"
-            ) from err
+            _LOGGER.debug("Anonymous music catalogue probe failed: %s", type(err).__name__)
+            diagnostic = {
+                "outcome": "network_or_timeout_error",
+                "candidates": [],
+            }
         return {
             "marketplace": marketplace,
             "query": query,
-            "candidates": [
-                {
-                    "name": item.name,
-                    "type": item.kind,
-                    "catalog_id": item.catalog_id,
-                    "url": item.url,
-                    "exact_name_match": item.exact_name_match,
-                }
-                for item in candidates
-            ],
+            "diagnostics": {
+                "transport": "anonymous_graphql",
+                "operation": "SpecSearchPage",
+                "http_status": diagnostic.get("http_status"),
+                "content_type": diagnostic.get("content_type"),
+                "outcome": diagnostic.get("outcome"),
+                "error_count": diagnostic.get("error_count", 0),
+                "error_codes": diagnostic.get("error_codes", []),
+            },
+            "candidates": diagnostic.get("candidates", []),
             "note": (
-                "Experimental unauthenticated public HTML probe. "
-                "Empty results may mean JavaScript-only search or access limits. "
-                "Catalogue identifiers are NOT usable native musicAlarmIds."
+                "Read-only anonymous GraphQL test. No Amazon cookies, API keys, "
+                "CSRF tokens, or Alexa credentials are sent. An empty result "
+                "does not prove content is absent. Catalogue IDs cannot be "
+                "passed directly as native musicAlarmIds."
             ),
         }
 
