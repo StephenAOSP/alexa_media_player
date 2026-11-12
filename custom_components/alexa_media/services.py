@@ -20,6 +20,7 @@ from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv, entity_registry as er
 from homeassistant.helpers.storage import Store
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util import dt as dt_util, slugify
 import voluptuous as vol
 
@@ -48,6 +49,7 @@ from .const import (
     SERVICE_UPDATE_LAST_CALLED,
 )
 from .helpers import _catch_login_errors, report_relogin_required, safe_get
+from .amazon_music_public import probe_public_music_search
 
 _LOGGER = logging.getLogger(__name__)
 _MUSIC_ASSET_LOCKS: dict[str, asyncio.Lock] = {}
@@ -95,6 +97,12 @@ ALARM_DATE_PRESETS = ("today", "tomorrow")
 ALARM_DAY_OPTIONS = (*ALARM_DAYS, *ALARM_DAY_PRESETS, *ALARM_DATE_PRESETS)
 MUSIC_ALARM_TYPES = ("default", "music")
 LIST_ALARMS_SCHEMA = vol.Schema({vol.Required(ATTR_ENTITY_ID): cv.entity_id})
+SEARCH_MUSIC_CATALOG_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_ENTITY_ID): cv.entity_id,
+        vol.Required("query"): vol.All(cv.string, vol.Length(min=1, max=200)),
+    }
+)
 
 CREATE_ALARM_SCHEMA = vol.Schema(
     {
@@ -259,6 +267,11 @@ SERVICE_DEFS: tuple[AlexaServiceDef, ...] = (
         handler="list_alarms",
     ),
     AlexaServiceDef(
+        name="search_music_catalog",
+        schema=SEARCH_MUSIC_CATALOG_SCHEMA,
+        handler="search_music_catalog",
+    ),
+    AlexaServiceDef(
         name="inspect_music_alarm_metadata",
         schema=LIST_ALARMS_SCHEMA,
         handler="inspect_music_alarm_metadata",
@@ -302,7 +315,7 @@ class AlexaMediaServices:
                 schema=service_def.schema,
                 supports_response=(
                     SupportsResponse.ONLY
-                    if service_def.name in ("list_alarms", "inspect_music_alarm_metadata")
+                    if service_def.name in ("list_alarms", "inspect_music_alarm_metadata", "search_music_catalog")
                     else SupportsResponse.NONE
                 ),
             )
@@ -800,6 +813,50 @@ class AlexaMediaServices:
             entity_id,
             SERVICE_CREATE_ALARM,
         )
+
+    async def search_music_catalog(self, call: ServiceCall) -> dict[str, Any]:
+        """Probe a public music search page; return observed catalogue links only.
+
+        This experimental diagnostic never creates an alarm or starts playback.
+        A missing result is not proof the content is absent from Amazon Music.
+        """
+        login_obj, _, _, _ = self._resolve_alarm_device(
+            call.data[ATTR_ENTITY_ID]
+        )
+        marketplace = self._amazon_account_marketplace(login_obj)
+        if marketplace is None:
+            raise ServiceValidationError(
+                "Amazon marketplace not available for this Alexa account"
+            )
+        query = call.data["query"].strip()
+        session = async_get_clientsession(self.hass)
+        try:
+            candidates = await probe_public_music_search(
+                session, marketplace=marketplace, query=query
+            )
+        except (ValueError, OSError, asyncio.TimeoutError) as err:
+            raise HomeAssistantError(
+                "Public Amazon Music search was unavailable"
+            ) from err
+        return {
+            "marketplace": marketplace,
+            "query": query,
+            "candidates": [
+                {
+                    "name": item.name,
+                    "type": item.kind,
+                    "catalog_id": item.catalog_id,
+                    "url": item.url,
+                    "exact_name_match": item.exact_name_match,
+                }
+                for item in candidates
+            ],
+            "note": (
+                "Experimental unauthenticated public HTML probe. "
+                "Empty results may mean JavaScript-only search or access limits. "
+                "Catalogue identifiers are NOT usable native musicAlarmIds."
+            ),
+        }
 
     async def inspect_music_alarm_metadata(
         self, call: ServiceCall
