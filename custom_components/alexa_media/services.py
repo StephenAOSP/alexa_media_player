@@ -12,6 +12,7 @@ from dataclasses import dataclass
 import datetime
 import logging
 from typing import Any, Callable
+from urllib.parse import urlparse
 
 from alexapy import AlexaAPI, AlexapyLoginError, hide_email
 from alexapy.errors import AlexapyConnectionError, AlexapyTooManyRequestsError
@@ -665,6 +666,44 @@ class AlexaMediaServices:
                 await store.async_save(saved)
             return saved
 
+    @staticmethod
+    def _amazon_account_marketplace(login_obj) -> str | None:
+        """Return the configured Amazon account domain, not HA's location.
+
+        This is a marketplace hint for a future read-only lookup adapter.
+        It is not a music catalogue URL and does not authorize API access.
+        """
+        raw_url = getattr(login_obj, "url", None)
+        if not isinstance(raw_url, str) or not raw_url.strip():
+            return None
+        parsed = urlparse(
+            raw_url if "://" in raw_url else f"https://{raw_url}"
+        )
+        hostname = (parsed.hostname or "").lower().removeprefix("www.")
+        supported = {
+            "amazon.com",
+            "amazon.co.uk",
+            "amazon.de",
+            "amazon.fr",
+            "amazon.it",
+            "amazon.es",
+            "amazon.co.jp",
+            "amazon.ca",
+            "amazon.com.au",
+            "amazon.com.br",
+            "amazon.com.mx",
+            "amazon.in",
+            "amazon.nl",
+            "amazon.se",
+            "amazon.pl",
+            "amazon.com.tr",
+            "amazon.com.be",
+            "amazon.ae",
+            "amazon.sa",
+            "amazon.sg",
+        }
+        return hostname if hostname in supported else None
+
     async def resolve_music_alarm_asset(
         self, login_obj, provider: str, entity: str
     ) -> str:
@@ -685,11 +724,20 @@ class AlexaMediaServices:
         learned = await self._learn_music_assets(login_obj)
         asset_id = learned.get(self._music_key(provider, entity))
 
-        if not asset_id:
+        if not asset_id and provider.strip().casefold() == "amazon music":
             read_only_resolver = self._functions.get("resolve_music_alarm_asset")
             if callable(read_only_resolver):
-                # The resolver must be read-only and must never initiate playback.
-                asset_id = await read_only_resolver(login_obj, provider, entity)
+                marketplace = self._amazon_account_marketplace(login_obj)
+                if marketplace is None:
+                    raise ServiceValidationError(
+                        "Amazon account marketplace is unavailable or unsupported; "
+                        "cannot safely look up a new music selection"
+                    )
+                # Adapter must be an explicitly configured, read-only lookup.
+                # Never call playback, guess identifiers, or cross marketplaces.
+                asset_id = await read_only_resolver(
+                    login_obj, provider, entity, marketplace
+                )
 
         if not asset_id:
             raise ServiceValidationError(
