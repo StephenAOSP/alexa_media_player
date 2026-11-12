@@ -26,6 +26,23 @@ The user should not need an Amazon Music URL.
 - `services.py` already selects Amazon domain from the Alexa account and supports reusing a verified `musicAlarmId` from existing alarms.
 - The new client is **not yet wired to a Home Assistant service**; credentials and a verified catalogue-to-alarm-ID resolver are unavailable.
 
+## Experimental public name-search probe
+
+The research branch now exposes a read-only Home Assistant response action:
+
+```yaml
+action: alexa_media.search_music_catalog
+data:
+  entity_id: media_player.bedroom_echo
+  query: Enya
+```
+
+The action derives `amazon.co.uk` or another regional Amazon marketplace from the logged-in Alexa account. It requests a public `https://music.<marketplace>/search/<query>` HTML page **without Alexa cookies, Amazon Music API tokens, or playback**. It accepts only visible named links to known artist/album/track catalogue pages on that same marketplace. Empty results can mean JavaScript-rendered results, a redirect, an unavailable page, a different search URL scheme, or lack of content; they are **not** evidence that an artist is absent.
+
+**Important:** This URL shape is an experimental probe, not a verified Amazon public search API. Public named artist pages have been independently observed, but unauthenticated name-search results could not yet be verified. This action is deliberately NOT wired to `create_alarm` and does not return a native Alexa `musicAlarmId`.
+
+The public page inspector can separately extract an ASIN from known artist or album URLs. Neither probe supplies the missing ASIN-to-native-alarm-UUID mapping.
+
 ## Current blocker
 
 Amazon's Music Web API remains closed beta / partner access at the time of research. An ordinary Alexa login session does **not** imply eligibility to call the Music Web API. Never use Alexa account OAuth tokens or cookies as substitute Music API credentials or publish those secrets.
