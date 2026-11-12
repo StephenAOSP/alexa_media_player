@@ -660,6 +660,48 @@ class AlexaMediaServices:
                 await store.async_save(saved)
             return saved
 
+    async def resolve_music_alarm_asset(
+        self, login_obj, provider: str, entity: str
+    ) -> str:
+        """Resolve a native music-alarm asset without playback or voice commands.
+
+        Reuse verified identifiers learned from existing Alexa alarms. An optional
+        read-only provider resolver may be supplied by the integration when a
+        genuine Alexa music-alarm lookup API has been identified. Its result must
+        be a native musicAlarmId, not a playback/catalogue ID.
+        """
+        import uuid
+
+        if not isinstance(provider, str) or not provider.strip():
+            raise ServiceValidationError("Music provider must not be blank")
+        if not isinstance(entity, str) or not entity.strip():
+            raise ServiceValidationError("Music selection must not be blank")
+
+        learned = await self._learn_music_assets(login_obj)
+        asset_id = learned.get(self._music_key(provider, entity))
+
+        if not asset_id:
+            read_only_resolver = self._functions.get("resolve_music_alarm_asset")
+            if callable(read_only_resolver):
+                # The resolver must be read-only and must never initiate playback.
+                asset_id = await read_only_resolver(login_obj, provider, entity)
+
+        if not asset_id:
+            raise ServiceValidationError(
+                f"No music-alarm identifier found for '{entity}' on '{provider}'. "
+                "A read-only lookup for new selections is not yet available; "
+                "no music played and no alarm created."
+            )
+        if not isinstance(asset_id, str):
+            raise ServiceValidationError("Music-alarm identifier must be a string")
+        try:
+            uuid.UUID(asset_id)
+        except ValueError as err:
+            raise ServiceValidationError(
+                "Music-alarm identifier is invalid; no alarm created"
+            ) from err
+        return asset_id
+
     async def create_alarm(self, call: ServiceCall) -> bool:
         """Create an alarm on a device.
 
@@ -688,24 +730,9 @@ class AlexaMediaServices:
             call.data.get(ATTR_TIME), days, time_zone
         )
         if alarm_type == "music":
-            import uuid
-
-            # Learn from all currently cached Alexa alarms before resolving.
-            learned = await self._learn_music_assets(login_obj)
-            music_alarm_id = learned.get(self._music_key(music_provider, music_entity))
-            if not music_alarm_id:
-                raise ServiceValidationError(
-                    f"No learned music asset for '{music_entity}' on "
-                    f"'{music_provider}'. First create a music alarm by voice, "
-                    "refresh Alexa Media Player alarms, then run "
-                    "alexa_media.list_alarms to save the station. No alarm created."
-                )
-            try:
-                uuid.UUID(music_alarm_id)
-            except ValueError as err:
-                raise ServiceValidationError(
-                    "Stored music asset ID is invalid"
-                ) from err
+            music_alarm_id = await self.resolve_music_alarm_asset(
+                login_obj, music_provider, music_entity
+            )
         return await self._change_alarm(
             AlexaAPI.create_alarm(
                 login_obj,
