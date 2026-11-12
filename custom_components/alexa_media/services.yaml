@@ -178,6 +178,27 @@ list_alarms:
           domain: media_player
           integration: alexa_media
 
+search_music_catalog:
+  name: Search public Amazon Music catalogue (experimental)
+  description: >-
+    Read-only anonymous website search probe for artist, album and track names.
+    Results depend on publicly available HTML and may be empty if Amazon uses
+    JavaScript or blocks anonymous searches. Does not create alarms or play music.
+  fields:
+    entity_id:
+      name: Entity
+      required: true
+      selector:
+        entity:
+          domain: media_player
+          integration: alexa_media
+    query:
+      name: Artist, album or song name
+      required: true
+      example: Enya
+      selector:
+        text:
+
 inspect_music_alarm_metadata:
   name: Inspect cached music alarm metadata (experimental)
   description: >-
