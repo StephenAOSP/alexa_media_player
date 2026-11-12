@@ -68,3 +68,50 @@ identified, and it should not be guessed from artist ASINs.
 the examined AlexaPy APIs.** Voice-equivalent text commands are known, but
 cannot be assumed silent. Do not merge speculative or audible behaviour into
 PR #3687.
+
+
+## Further source tracing: Alexa behaviours vs provider music search (12 November 2026)
+
+Verified from AlexaPy `alexapy/alexaapi.py`:
+
+- `play_music(provider_id, search_phrase)` delegates to
+  `send_sequence("Alexa.Music.PlaySearchPhrase", searchPhrase=...,
+  sanitizedSearchPhrase=..., musicProviderId=...)`.
+- `send_sequence` wraps this in an Alexa behaviours operation and
+  `run_behavior` POSTs to `/api/behaviors/preview` on the regional Alexa web
+  host (UK: `alexa.amazon.co.uk`).
+- That is an **execution** endpoint. Neither `play_music` nor
+  `run_behavior` returns a resolved music content ID to the caller.
+  Trying `PlaySearchPhrase` even once would initiate playback, violating
+  the strict no-audio requirement. We did **not** send such a command.
+- Inspecting Python alone cannot disclose Alexa's private downstream provider
+  calls or the source of its internal music search results.
+
+**New documented architecture:** Amazon's Alexa Music, Radio, and Podcast Skill
+API exposes `Alexa.Media.Search.GetPlayableContent`, which Alexa sends
+**to a music provider's skill**, with resolved selection criteria; the
+provider returns a `contentId`. Amazon documents saving that `contentId`
+for a music alarm and subsequently sending `Alexa.Media.Playback.Initiate`
+when the alarm fires. Sources:
+
+- https://developer.amazon.com/en-US/docs/alexa/device-apis/alexa-media-search.html
+- https://developer.amazon.com/en-US/docs/alexa/music-skills/understand-content-id.html
+- https://developer.amazon.com/en-US/docs/alexa/device-apis/alexa-media-playback.html
+
+**Important caveats:** This is a provider-facing service contract, NOT an
+account-facing method in AlexaPy, and there is no verified authenticated
+request that HA can send to invoke `GetPlayableContent` for Amazon Music.
+The provider `contentId` is NOT proven identical to Alexa notification
+`musicAlarmId`. In fact, Amazon requires content IDs to be persistent for
+the same content, whereas the three manually created Enya alarms had three
+distinct `musicAlarmId` UUIDs: the two identifiers may represent different
+layers.
+
+**Concrete next evidence to seek without audio:** Capture only endpoint
+paths, operation names, safe JSON field *names*, and redacted response schema
+when opening the Alexa app's music-alarm picker or selecting an artist.
+The likely bridge is the Alexa **client-facing** music-selection endpoint
+that requests a provider resolution and produces an alarm-specific music
+selection, not `Alexa.Media.Search` (which is provider-facing).
+Never upload raw HARs/auth headers/cookies/account IDs. No production-code
+changes or live playback tests justified yet.
