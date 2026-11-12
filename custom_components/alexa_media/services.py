@@ -21,7 +21,6 @@ from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv, entity_registry as er
 from homeassistant.helpers.storage import Store
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util import dt as dt_util, slugify
 import voluptuous as vol
 
@@ -51,7 +50,6 @@ from .const import (
 )
 from .helpers import _catch_login_errors, report_relogin_required, safe_get
 from .amazon_music_graphql import probe_anonymous_graphql
-from .amazon_music_public import probe_public_music_search
 
 _LOGGER = logging.getLogger(__name__)
 _MUSIC_ASSET_LOCKS: dict[str, asyncio.Lock] = {}
