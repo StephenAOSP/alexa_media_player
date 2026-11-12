@@ -178,6 +178,21 @@ list_alarms:
           domain: media_player
           integration: alexa_media
 
+inspect_music_alarm_metadata:
+  name: Inspect cached music alarm metadata (experimental)
+  description: >-
+    Read-only diagnostic for comparing previously created artist and track
+    music alarms. Shows a short fingerprint of each musicAlarmId, not the raw ID.
+    Does not search Amazon Music, create alarms or start playback.
+  fields:
+    entity_id:
+      name: Entity
+      required: true
+      selector:
+        entity:
+          domain: media_player
+          integration: alexa_media
+
 enable_alarm:
   name: Enable alarm
   description: Turn on an Echo alarm.
