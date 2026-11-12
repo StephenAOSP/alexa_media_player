@@ -44,7 +44,7 @@ def frozen_now():
 
 
 def make_services(alarm=ALARM):
-    login = MagicMock(email=EMAIL)
+    login = MagicMock(email=EMAIL, url="amazon.co.uk")
     hass = MagicMock()
     hass.data = {
         DATA_ALEXAMEDIA: {
@@ -483,7 +483,7 @@ async def test_music_resolver_accepts_verified_new_asset():
             login, "Amazon Music", "Enya"
         )
     assert result == MUSIC_ALARM_ID
-    lookup.assert_awaited_once_with(login, "Amazon Music", "Enya")
+    lookup.assert_awaited_once_with(login, "Amazon Music", "Enya", "amazon.co.uk")
 
 
 @pytest.mark.asyncio
@@ -612,3 +612,59 @@ async def test_music_alarm_metadata_inspection_empty_cache():
     result = await services.inspect_music_alarm_metadata(call())
     assert result["cached_music_alarm_count"] == 0
     assert result["alarms"] == []
+
+
+@pytest.mark.parametrize(
+    ("account_domain", "marketplace"),
+    [
+        ("amazon.co.uk", "amazon.co.uk"),
+        ("https://www.amazon.com", "amazon.com"),
+        ("amazon.de", "amazon.de"),
+        ("www.amazon.co.jp", "amazon.co.jp"),
+        ("amazon.com.au", "amazon.com.au"),
+        ("https://subdomain.amazon.co.uk", None),
+        ("https://example.com", None),
+        ("", None),
+        (None, None),
+    ],
+)
+def test_music_resolver_marketplace_from_alexa_account(
+    account_domain, marketplace
+):
+    """Use the Alexa account domain; never infer from HA timezone or location."""
+    services, login, _ = make_services()
+    login.url = account_domain
+    assert services._amazon_account_marketplace(login) == marketplace
+
+
+@pytest.mark.asyncio
+async def test_music_resolver_does_not_query_unknown_marketplace():
+    """Unknown account region should not be searched or create an alarm."""
+    services, login, _ = make_services()
+    login.url = "example.com"
+    lookup = AsyncMock(return_value=MUSIC_ALARM_ID)
+    services._functions["resolve_music_alarm_asset"] = lookup
+    with (
+        patch.object(
+            services, "_learn_music_assets", new_callable=AsyncMock, return_value={}
+        ),
+        pytest.raises(ServiceValidationError, match="marketplace"),
+    ):
+        await services.resolve_music_alarm_asset(login, "Amazon Music", "Enya")
+    lookup.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_music_resolver_never_queries_new_radio_selections():
+    """Existing learned radio support stays intact; Amazon-only search is isolated."""
+    services, login, _ = make_services()
+    lookup = AsyncMock(return_value=MUSIC_ALARM_ID)
+    services._functions["resolve_music_alarm_asset"] = lookup
+    with (
+        patch.object(
+            services, "_learn_music_assets", new_callable=AsyncMock, return_value={}
+        ),
+        pytest.raises(ServiceValidationError, match="No music-alarm identifier"),
+    ):
+        await services.resolve_music_alarm_asset(login, "Global Player", "Radio X UK")
+    lookup.assert_not_awaited()
