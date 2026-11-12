@@ -258,6 +258,11 @@ SERVICE_DEFS: tuple[AlexaServiceDef, ...] = (
         handler="list_alarms",
     ),
     AlexaServiceDef(
+        name="inspect_music_alarm_metadata",
+        schema=LIST_ALARMS_SCHEMA,
+        handler="inspect_music_alarm_metadata",
+    ),
+    AlexaServiceDef(
         name=SERVICE_ENABLE_ALARM,
         schema=ALARM_SCHEMA,
         handler="enable_alarm",
@@ -296,7 +301,7 @@ class AlexaMediaServices:
                 schema=service_def.schema,
                 supports_response=(
                     SupportsResponse.ONLY
-                    if service_def.name == "list_alarms"
+                    if service_def.name in ("list_alarms", "inspect_music_alarm_metadata")
                     else SupportsResponse.NONE
                 ),
             )
@@ -747,6 +752,73 @@ class AlexaMediaServices:
             entity_id,
             SERVICE_CREATE_ALARM,
         )
+
+    async def inspect_music_alarm_metadata(
+        self, call: ServiceCall
+    ) -> dict[str, Any]:
+        """Inspect cached music alarms without exposing raw asset or device IDs.
+
+        This is an experimental read-only research tool: no API requests,
+        alarm creation, playback, or persistent storage writes occur.
+        """
+        import hashlib
+        import uuid
+
+        login_obj, serial, _, _ = self._resolve_alarm_device(
+            call.data[ATTR_ENTITY_ID]
+        )
+        cached = (
+            self.hass.data[DATA_ALEXAMEDIA]["accounts"]
+            .get(login_obj.email, {})
+            .get("notifications", {})
+            .get(serial, {})
+            .get("Alarm", {})
+        )
+        results = []
+        if isinstance(cached, dict):
+            for alarm in cached.values():
+                if not isinstance(alarm, dict):
+                    continue
+                provider = alarm.get("provider")
+                content = alarm.get("musicEntity")
+                music_id = alarm.get("musicAlarmId")
+                if not any((provider, content, music_id)):
+                    continue
+                # These are observations, not guesses about artist/track type.
+                valid_uuid = False
+                fingerprint = None
+                if isinstance(music_id, str) and music_id:
+                    try:
+                        uuid.UUID(music_id)
+                        valid_uuid = True
+                    except ValueError:
+                        pass
+                    fingerprint = hashlib.sha256(
+                        music_id.encode("utf-8")
+                    ).hexdigest()[:16]
+                results.append(
+                    {
+                        "provider": provider if isinstance(provider, str) else None,
+                        "music_entity": content if isinstance(content, str) else None,
+                        "music_id_present": bool(music_id),
+                        "music_id_uuid_format": valid_uuid,
+                        "music_id_fingerprint": fingerprint,
+                        "recurring_pattern": alarm.get("recurringPattern"),
+                        "status": alarm.get("status"),
+                    }
+                )
+        results.sort(
+            key=lambda item: (
+                str(item["provider"] or "").casefold(),
+                str(item["music_entity"] or "").casefold(),
+            )
+        )
+        return {
+            "entity_id": call.data[ATTR_ENTITY_ID],
+            "cached_music_alarm_count": len(results),
+            "alarms": results,
+            "note": "Cached metadata only. Fingerprints are local comparisons, not catalogue IDs.",
+        }
 
     async def list_alarms(self, call: ServiceCall) -> dict[str, Any]:
         """Return cached Alexa alarm metadata without exposing serials or IDs."""
