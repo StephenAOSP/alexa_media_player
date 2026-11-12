@@ -188,3 +188,122 @@ async def probe_anonymous_graphql(
         "content_type": mime,
         "candidates": candidates,
     }
+
+async def probe_existing_alexa_session(
+    *, session: ClientSession, marketplace: str, query: str
+) -> dict[str, Any]:
+    """Test the already-running AlexaPy session for read-only catalogue access.
+
+    aiohttp applies its normal cookie-domain and path rules. No browser
+    credentials, CSRF values, API keys or explicit cookie headers are copied.
+    Never log or return cookie names or values.
+    """
+    from yarl import URL
+
+    from .amazon_music_public import _ALLOWED_MARKETPLACES
+
+    if marketplace not in _ALLOWED_MARKETPLACES:
+        raise ValueError("Unsupported marketplace")
+    if not isinstance(query, str) or not query.strip() or len(query) > 200:
+        raise ValueError("Search text must contain 1 to 200 characters")
+    if session is None or getattr(session, "closed", True):
+        return {"outcome": "alexa_session_unavailable", "candidates": []}
+
+    query = query.strip()
+    endpoint = f"https://gql.music.{marketplace}/"
+    applicable_cookie_count = len(session.cookie_jar.filter_cookies(URL(endpoint)))
+    payload = {
+        "operationName": "SpecSearchPage",
+        "variables": {
+            "searchText": query,
+            "specifications": [
+                {"label": label, "types": [kind], "limit": 10}
+                for label, kind in _SEARCH_GROUPS
+            ],
+            "isAuthenticated": False,
+            "audiobooksEnabled": False,
+            "merchEnabled": False,
+            "categoryInEntityUnionEnabled": False,
+        },
+        "extensions": {
+            "clientLibrary": {"name": "@apollo/client", "version": "4.1.6"},
+            "persistedQuery": {"version": 1, "sha256Hash": _SPEC_SEARCH_HASH},
+        },
+    }
+
+    async with session.post(
+        endpoint,
+        json=payload,
+        headers={"Accept": "application/json", "Content-Type": "application/json"},
+        allow_redirects=False,
+        timeout=ClientTimeout(total=12),
+    ) as response:
+        status = response.status
+        mime = response.headers.get("Content-Type", "").split(";")[0]
+        if status != 200 or mime != "application/json":
+            return {
+                "outcome": "http_error_or_non_json",
+                "http_status": status,
+                "content_type": mime,
+                "applicable_cookie_count": applicable_cookie_count,
+                "candidates": [],
+            }
+        content = await response.content.read(2_000_001)
+        if len(content) > 2_000_000:
+            return {
+                "outcome": "response_too_large",
+                "http_status": status,
+                "content_type": mime,
+                "applicable_cookie_count": applicable_cookie_count,
+                "candidates": [],
+            }
+    import json
+
+    try:
+        body = json.loads(content)
+    except (ValueError, UnicodeDecodeError):
+        return {
+            "outcome": "invalid_json",
+            "http_status": status,
+            "content_type": mime,
+            "applicable_cookie_count": applicable_cookie_count,
+            "candidates": [],
+        }
+    if not isinstance(body, dict):
+        return {
+            "outcome": "invalid_response_shape",
+            "http_status": status,
+            "content_type": mime,
+            "applicable_cookie_count": applicable_cookie_count,
+            "candidates": [],
+        }
+    errors = body.get("errors")
+    if isinstance(errors, list) and errors:
+        codes = sorted(
+            {
+                code
+                for item in errors
+                if isinstance(item, dict)
+                for details in [item.get("extensions")]
+                if isinstance(details, dict)
+                for code in [details.get("code")]
+                if isinstance(code, str) and code.isidentifier() and len(code) <= 50
+            }
+        )
+        return {
+            "outcome": "graphql_errors",
+            "http_status": status,
+            "content_type": mime,
+            "applicable_cookie_count": applicable_cookie_count,
+            "error_count": len(errors),
+            "error_codes": codes,
+            "candidates": [],
+        }
+    candidates = parse_graphql_catalogue(body, query)
+    return {
+        "outcome": "catalogue_results" if candidates else "no_parsed_results",
+        "http_status": status,
+        "content_type": mime,
+        "applicable_cookie_count": applicable_cookie_count,
+        "candidates": candidates,
+    }
