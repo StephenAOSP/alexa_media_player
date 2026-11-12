@@ -672,7 +672,7 @@ async def test_music_resolver_never_queries_new_radio_selections():
 
 @pytest.mark.asyncio
 async def test_search_music_catalog_returns_account_marketplace_candidates():
-    """GraphQL diagnostic only; never create an alarm or start playback."""
+    """The existing-session probe must never create alarms or start music."""
     services, login, _ = make_services()
     login.url = "amazon.co.uk"
     services._resolve_alarm_device = MagicMock(
@@ -686,12 +686,13 @@ async def test_search_music_catalog_returns_account_marketplace_candidates():
     }
     with (
         patch(
-            "custom_components.alexa_media.services.probe_anonymous_graphql",
+            "custom_components.alexa_media.services.probe_existing_alexa_session",
             new_callable=AsyncMock,
             return_value={
                 "outcome": "catalogue_results",
                 "http_status": 200,
                 "content_type": "application/json",
+                "applicable_cookie_count": 12,
                 "candidates": [candidate],
             },
         ) as probe,
@@ -702,8 +703,11 @@ async def test_search_music_catalog_returns_account_marketplace_candidates():
 
     assert result["marketplace"] == "amazon.co.uk"
     assert result["candidates"][0]["catalog_id"] == "B001ED54MQ"
-    assert result["diagnostics"]["outcome"] == "catalogue_results"
-    probe.assert_awaited_once_with(marketplace="amazon.co.uk", query="Enya")
+    assert result["diagnostics"]["transport"] == "existing_alexapy_session"
+    assert result["diagnostics"]["applicable_cookie_count"] == 12
+    probe.assert_awaited_once_with(
+        session=login.session, marketplace="amazon.co.uk", query="Enya"
+    )
     create.assert_not_called()
     play.assert_not_called()
 
