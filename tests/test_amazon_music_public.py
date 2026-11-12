@@ -7,6 +7,8 @@ import pytest
 from custom_components.alexa_media.amazon_music_public import (
     parse_public_music_url,
     read_public_music_page,
+    extract_public_music_search_candidates,
+    probe_public_music_search,
 )
 
 
@@ -82,3 +84,76 @@ async def test_public_catalogue_read_uses_no_auth_and_does_not_follow_redirect()
     _, kwargs = session.get.call_args
     assert kwargs["allow_redirects"] is False
     assert "Authorization" not in kwargs["headers"]
+
+
+def test_public_search_extracts_only_valid_matching_marketplace_links():
+    html = """
+    <a href="/artists/B001ED54MQ/enya">Enya</a>
+    <a href="https://music.amazon.co.uk/albums/B012345678">Watermark</a>
+    <a href="https://music.amazon.de/artists/B001ED54MQ">Wrong region</a>
+    <a href="https://evil.example/artists/B001ED54MQ">Untrusted</a>
+    <a href="/artists/INVALID">Invalid</a>
+    """
+    results = extract_public_music_search_candidates(
+        html, marketplace="amazon.co.uk", query="Enya"
+    )
+    assert [(item.name, item.catalog_id) for item in results] == [
+        ("Enya", "B001ED54MQ"),
+        ("Watermark", "B012345678"),
+    ]
+    assert results[0].exact_name_match is True
+    assert results[1].exact_name_match is False
+
+
+@pytest.mark.asyncio
+async def test_public_search_probe_no_auth_and_no_redirect():
+    response = MagicMock()
+    response.status = 200
+    response.headers = {"Content-Type": "text/html; charset=utf-8"}
+    response.content_length = None
+    response.content.read = AsyncMock(
+        return_value=b'<a href="/artists/B001ED54MQ/enya">Enya</a>'
+    )
+    ctx = AsyncMock()
+    ctx.__aenter__.return_value = response
+    session = MagicMock()
+    session.get.return_value = ctx
+    results = await probe_public_music_search(
+        session, marketplace="amazon.co.uk", query="Enya"
+    )
+    assert results[0].catalog_id == "B001ED54MQ"
+    args, kwargs = session.get.call_args
+    assert args[0] == "https://music.amazon.co.uk/search/Enya"
+    assert kwargs["allow_redirects"] is False
+    assert "Authorization" not in kwargs["headers"]
+
+
+@pytest.mark.asyncio
+async def test_public_search_unavailable_does_not_invent_results():
+    response = MagicMock()
+    response.status = 302
+    response.headers = {"Location": "https://example.com"}
+    ctx = AsyncMock()
+    ctx.__aenter__.return_value = response
+    session = MagicMock()
+    session.get.return_value = ctx
+    results = await probe_public_music_search(
+        session, marketplace="amazon.co.uk", query="Enya"
+    )
+    assert results == []
+
+
+@pytest.mark.asyncio
+async def test_public_search_empty_js_shell_has_no_matches():
+    response = MagicMock()
+    response.status = 200
+    response.headers = {"Content-Type": "text/html"}
+    response.content_length = 15
+    response.content.read = AsyncMock(return_value=b"<html></html>")
+    ctx = AsyncMock()
+    ctx.__aenter__.return_value = response
+    session = MagicMock()
+    session.get.return_value = ctx
+    assert await probe_public_music_search(
+        session, marketplace="amazon.co.uk", query="Enya"
+    ) == []
