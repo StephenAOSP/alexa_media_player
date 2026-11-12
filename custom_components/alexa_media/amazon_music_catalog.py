@@ -50,7 +50,7 @@ def normalize_music_search_items(
         node = edge.get("node") if isinstance(edge, dict) else None
         if not isinstance(node, dict):
             continue
-        name = node.get("name")
+        name = node.get("name") if kind == "artist" else node.get("title")
         catalog_id = node.get("id")
         if not all(isinstance(v, str) and v.strip() for v in (name, catalog_id)):
             continue
