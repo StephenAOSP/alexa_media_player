@@ -672,32 +672,29 @@ async def test_music_resolver_never_queries_new_radio_selections():
 
 @pytest.mark.asyncio
 async def test_search_music_catalog_returns_account_marketplace_candidates():
-    """Expose a read-only public catalogue probe without creating alarms."""
-    from custom_components.alexa_media.amazon_music_public import (
-        PublicMusicSearchCandidate,
-    )
-
+    """GraphQL diagnostic only; never create an alarm or start playback."""
     services, login, _ = make_services()
     login.url = "amazon.co.uk"
     services._resolve_alarm_device = MagicMock(
         return_value=(login, SERIAL, DEVICE_TYPE, None)
     )
-    candidate = PublicMusicSearchCandidate(
-        name="Enya",
-        kind="artist",
-        catalog_id="B001ED54MQ",
-        url="https://music.amazon.co.uk/artists/B001ED54MQ/enya",
-        exact_name_match=True,
-    )
+    candidate = {
+        "name": "Enya",
+        "type": "artist",
+        "catalog_id": "B001ED54MQ",
+        "exact_name_match": True,
+    }
     with (
         patch(
-            "custom_components.alexa_media.services.probe_public_music_search",
+            "custom_components.alexa_media.services.probe_anonymous_graphql",
             new_callable=AsyncMock,
-            return_value=[candidate],
+            return_value={
+                "outcome": "catalogue_results",
+                "http_status": 200,
+                "content_type": "application/json",
+                "candidates": [candidate],
+            },
         ) as probe,
-        patch(
-            "custom_components.alexa_media.services.async_get_clientsession"
-        ) as get_session,
         patch.object(AlexaAPI, "create_alarm", autospec=True) as create,
         patch.object(AlexaAPI, "play_music", autospec=True) as play,
     ):
@@ -705,9 +702,8 @@ async def test_search_music_catalog_returns_account_marketplace_candidates():
 
     assert result["marketplace"] == "amazon.co.uk"
     assert result["candidates"][0]["catalog_id"] == "B001ED54MQ"
-    probe.assert_awaited_once_with(
-        get_session.return_value, marketplace="amazon.co.uk", query="Enya"
-    )
+    assert result["diagnostics"]["outcome"] == "catalogue_results"
+    probe.assert_awaited_once_with(marketplace="amazon.co.uk", query="Enya")
     create.assert_not_called()
     play.assert_not_called()
 
