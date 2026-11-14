@@ -39,3 +39,19 @@ inspect_request_path:
   description: >-
     Inspects locally installed AlexaPy method code with string literals redacted.
     No Amazon requests, commands, alarms or volume changes.
+
+preview_v5:
+  name: V5 preview request injection (offline)
+  description: Checks AlexaPy installed code and proposed payload without sending an Amazon request.
+live_v5:
+  name: V5 live suppression candidate (real alarm)
+  description: >-
+    REAL 8 a.m. ABBA alarm request on living room Echo. Injects unverified
+    suppressResponse into Alexa.TextCommand operationPayload. Alexa may speak.
+    Check and remove duplicate alarms afterwards.
+  fields:
+    confirm_live_test:
+      name: Confirm live alarm test
+      required: true
+      selector:
+        boolean:
