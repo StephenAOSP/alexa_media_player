@@ -1,40 +1,35 @@
 preview_custom:
   name: Preview custom command (offline)
-  description: >-
-    Compare hypothetical Alexa custom-command payloads. Never contacts Amazon
-    or executes a command. The suppression field is unverified.
+  description: Compare hypothetical payloads without contacting Amazon.
   fields:
     command:
       name: Command
-      description: Alexa utterance to preview without executing.
       required: true
-      example: Set an alarm for 1 a.m.
       selector:
         text:
     suppress_response:
-      name: Include experimental suppression flag
-      description: Add an unverified suppressResponse field to the candidate.
+      name: Include hypothetical suppression field
       default: true
       selector:
         boolean:
-
 live_baseline:
   name: Live baseline on living room Echo
-  description: >-
-    REAL AMAZON COMMAND. Requests an 8 a.m. alarm playing ABBA on Amazon Music
-    using the existing Alexa Media Player integration. Alexa may speak or beep.
-    No response suppression is attempted. Run only when ready.
+  description: Real alarm command; may speak or beep. No suppression.
   fields:
     confirm_live_test:
-      name: Confirm live command
-      description: Must be true to send a real command and potentially create an alarm.
+      name: Confirm live test
       required: true
       selector:
         boolean:
-    entity_id:
-      name: Test Echo
-      description: Restricted to media_player.living_room_echo.
-      required: false
-      default: media_player.living_room_echo
+live_candidate:
+  name: Live experimental suppression candidate on living room Echo
+  description: >-
+    REAL COMMAND. Creates or updates an 8 a.m. ABBA Amazon Music alarm
+    using existing Alexa Media Player, with an UNVERIFIED suppression flag.
+    Echo may speak or beep; do not expect silence. Check for duplicate alarms.
+  fields:
+    confirm_live_test:
+      name: Confirm real test with unverified flag
+      required: true
       selector:
-        text:
+        boolean:
