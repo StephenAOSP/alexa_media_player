@@ -55,3 +55,9 @@ live_v5:
       required: true
       selector:
         boolean:
+
+inspect_v6:
+  name: V6 inspect alternative Alexa command pathways (read-only)
+  description: >-
+    Local static inspection of AlexaPy method names and known operation identifiers.
+    No Amazon calls, voice commands, alarm creation, or volume changes.
