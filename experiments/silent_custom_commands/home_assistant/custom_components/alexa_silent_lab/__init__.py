@@ -3,6 +3,7 @@ from __future__ import annotations
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 import voluptuous as vol
 from .preview import build_preview
+from .request_diagnostic import inspect_request_builders
 from .live import build_live_service_data, TEST_ENTITY
 
 DOMAIN = "alexa_silent_lab"
@@ -38,6 +39,11 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     async def live_candidate(call: ServiceCall) -> dict:
         return await run_live(call, candidate=True)
 
+    async def inspect_request_path(call: ServiceCall) -> dict:
+        return await hass.async_add_executor_job(inspect_request_builders)
+
+    hass.services.async_register(DOMAIN, "inspect_request_path", inspect_request_path,
+        supports_response=SupportsResponse.ONLY)
     hass.services.async_register(DOMAIN, "preview_custom", preview_custom,
         schema=PREVIEW_SCHEMA, supports_response=SupportsResponse.ONLY)
     hass.services.async_register(DOMAIN, "live_baseline", live_baseline,
