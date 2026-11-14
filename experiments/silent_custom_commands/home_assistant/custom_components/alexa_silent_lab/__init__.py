@@ -3,6 +3,7 @@ from __future__ import annotations
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 import voluptuous as vol
 from .preview import build_preview
+from .v61_targeted import inspect_v61
 from .v6_inventory import inventory as v6_inventory
 from .v5_experiment import preview as v5_preview, live as v5_live
 from .request_diagnostic import inspect_request_builders
@@ -61,6 +62,11 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         return await hass.async_add_executor_job(v6_inventory)
 
     hass.services.async_register(DOMAIN, "inspect_v6", inspect_v6,
+        supports_response=SupportsResponse.ONLY)
+    async def inspect_v61_service(call: ServiceCall) -> dict:
+        return await hass.async_add_executor_job(inspect_v61)
+
+    hass.services.async_register(DOMAIN, "inspect_v61", inspect_v61_service,
         supports_response=SupportsResponse.ONLY)
     hass.services.async_register(DOMAIN, "preview_custom", preview_custom,
         schema=PREVIEW_SCHEMA, supports_response=SupportsResponse.ONLY)
