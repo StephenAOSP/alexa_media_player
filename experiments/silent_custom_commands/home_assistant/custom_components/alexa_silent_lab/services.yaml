@@ -17,3 +17,24 @@ preview_custom:
       default: true
       selector:
         boolean:
+
+live_baseline:
+  name: Live baseline on living room Echo
+  description: >-
+    REAL AMAZON COMMAND. Requests an 8 a.m. alarm playing ABBA on Amazon Music
+    using the existing Alexa Media Player integration. Alexa may speak or beep.
+    No response suppression is attempted. Run only when ready.
+  fields:
+    confirm_live_test:
+      name: Confirm live command
+      description: Must be true to send a real command and potentially create an alarm.
+      required: true
+      selector:
+        boolean:
+    entity_id:
+      name: Test Echo
+      description: Restricted to media_player.living_room_echo.
+      required: false
+      default: media_player.living_room_echo
+      selector:
+        text:
