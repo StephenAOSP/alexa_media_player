@@ -13,6 +13,7 @@ python -m venv .venv-silent
 source .venv-silent/bin/activate
 python -m pip install alexapy==1.35.0
 python experiments/silent_custom_commands/inspect_alexapy.py
+python experiments/silent_custom_commands/audit_alexapy.py
 python -m unittest discover -s experiments/silent_custom_commands/tests -v
 ```
 
@@ -20,8 +21,8 @@ On Windows, activate with `.venv-silent\\Scripts\\activate`. The inspector reads
 
 ## Next steps (not yet implemented)
 
-1. Trace actual argument forwarding and JSON serialization in AlexaPy 1.35.0.
-2. Add transport-mocked tests to determine whether a candidate flag reaches the behaviour request, without contacting Amazon.
+1. **Ready for local verification:** run `audit_alexapy.py` to inventory call sites and forwarding keywords in the installed AlexaPy 1.35.0 source. This is static analysis only; it does not prove how Amazon interprets any field. Share only the sanitized audit output (review it before posting).
+2. **Pending:** after inspecting the exact 1.35.0 source, add version-specific transport-mocked tests to determine whether a candidate flag reaches the behaviour request, without contacting Amazon.
 3. Only after a candidate is justified, manually test it on an idle test Echo, one variation at a time.
 4. Verify that the action succeeds, no voice or tone is produced, no unwanted playback occurs, volume is unchanged, and any temporary alarm is removed.
 
