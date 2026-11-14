@@ -8,6 +8,17 @@ This branch was created from `StephenAOSP/alexa_media_player:dev`, independently
 
 The uploaded integration manifest pins `alexapy==1.34.0`, not 1.35.0. Its `media_player.py` handles `media_type == "custom"` and forwards `media_id`, `customer_id`, `queue_delay`, and `**kwargs` to `self.alexa_api.run_custom`. No `suppress_response` implementation was found in `media_player.py`. The ZIP contains the integration, **not** the separate `alexapy/alexaapi.py` dependency. This is evidence of forwarding at the integration boundary only, not evidence of silence or request serialization.
 
+## Verified upstream source references
+
+- Integration upstream: https://github.com/alandtse/alexa_media_player (default branch `dev`). Its current `manifest.json` declares `alexapy==1.35.0`.
+- This fork's `dev`-derived branch declares `alexapy==1.34.0`. Both declare integration version `5.20.0`; that label does not uniquely determine the AlexaPy pin.
+- AlexaPy's separate authoritative source repository: https://gitlab.com/keatontaylor/alexapy (not stored in the integration repository).
+- Exact package source release corresponding to this fork's pin: https://pypi.org/project/AlexaPy/1.34.0/.
+- Upstream `media_player.py` forwards the `custom` command's extra `**kwargs` into `run_custom`. This establishes call forwarding, **not** that Amazon honours any option.
+- A third-party GitHub copy of AlexaPy exists, but it is not evidence for AlexaPy 1.34.0, so do not implement against that copy.
+
+**Blocker:** the exact AlexaPy 1.34.0 `run_custom` serialization has not yet been retrieved and reviewed. Do not add a runtime suppression flag on the basis of an older source copy or the unverified `suppress_response` assumption.
+
 ## Inspect AlexaPy locally
 
 From the repository root, use a disposable Python environment with AlexaPy 1.34.0 installed:
