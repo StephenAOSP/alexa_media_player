@@ -33,3 +33,9 @@ live_candidate:
       required: true
       selector:
         boolean:
+
+inspect_request_path:
+  name: Inspect AlexaPy request building (read-only)
+  description: >-
+    Inspects locally installed AlexaPy method code with string literals redacted.
+    No Amazon requests, commands, alarms or volume changes.
