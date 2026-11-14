@@ -67,3 +67,8 @@ inspect_v61:
   description: >-
     Checks whether brief is a substring, traces routine and custom command calls,
     and identifies any visible response handling. No network calls or commands.
+
+inspect_v62:
+  name: V6.2 offline Python source comparison
+  description: >-
+    Compare installed AlexaPy operation identifiers with published alternative Alexa command implementations. No Amazon requests.
