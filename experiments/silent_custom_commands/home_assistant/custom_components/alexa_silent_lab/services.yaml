@@ -61,3 +61,9 @@ inspect_v6:
   description: >-
     Local static inspection of AlexaPy method names and known operation identifiers.
     No Amazon calls, voice commands, alarm creation, or volume changes.
+
+inspect_v61:
+  name: V6.1 targeted Alexa command-path inspection (read-only)
+  description: >-
+    Checks whether brief is a substring, traces routine and custom command calls,
+    and identifies any visible response handling. No network calls or commands.
