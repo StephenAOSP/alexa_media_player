@@ -4,14 +4,18 @@
 
 This branch was created from `StephenAOSP/alexa_media_player:dev`, independently of PR #3687 (`feature/native-music-alarms`). Do not merge the music-alarm branch into this experiment.
 
+## Evidence from user-provided Alexa Media Player 5.20.0 ZIP
+
+The uploaded integration manifest pins `alexapy==1.34.0`, not 1.35.0. Its `media_player.py` handles `media_type == "custom"` and forwards `media_id`, `customer_id`, `queue_delay`, and `**kwargs` to `self.alexa_api.run_custom`. No `suppress_response` implementation was found in `media_player.py`. The ZIP contains the integration, **not** the separate `alexapy/alexaapi.py` dependency. This is evidence of forwarding at the integration boundary only, not evidence of silence or request serialization.
+
 ## Inspect AlexaPy locally
 
-From the repository root, use a disposable Python environment with AlexaPy 1.35.0 installed:
+From the repository root, use a disposable Python environment with AlexaPy 1.34.0 installed:
 
 ```bash
 python -m venv .venv-silent
 source .venv-silent/bin/activate
-python -m pip install alexapy==1.35.0
+python -m pip install alexapy==1.34.0
 python experiments/silent_custom_commands/inspect_alexapy.py
 python experiments/silent_custom_commands/audit_alexapy.py
 python -m unittest discover -s experiments/silent_custom_commands/tests -v
@@ -21,7 +25,7 @@ On Windows, activate with `.venv-silent\\Scripts\\activate`. The inspector reads
 
 ## Next steps (not yet implemented)
 
-1. **Ready for local verification:** run `audit_alexapy.py` to inventory call sites and forwarding keywords in the installed AlexaPy 1.35.0 source. This is static analysis only; it does not prove how Amazon interprets any field. Share only the sanitized audit output (review it before posting).
+1. **Ready for local verification against the installed version:** run `audit_alexapy.py` to inventory call sites and forwarding keywords in the installed AlexaPy 1.34.0 source. This is static analysis only; it does not prove how Amazon interprets any field. Share only the sanitized audit output (review it before posting).
 2. **Pending:** after inspecting the exact 1.35.0 source, add version-specific transport-mocked tests to determine whether a candidate flag reaches the behaviour request, without contacting Amazon.
 3. Only after a candidate is justified, manually test it on an idle test Echo, one variation at a time.
 4. Verify that the action succeeds, no voice or tone is produced, no unwanted playback occurs, volume is unchanged, and any temporary alarm is removed.
