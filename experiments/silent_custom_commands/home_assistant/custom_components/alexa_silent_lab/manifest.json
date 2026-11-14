@@ -1,0 +1,9 @@
+{
+  "domain": "alexa_silent_lab",
+  "name": "Alexa Silent Lab (Experimental)",
+  "version": "0.1.0",
+  "documentation": "https://github.com/StephenAOSP/alexa_media_player/tree/feature/silent-custom-commands/experiments/silent_custom_commands",
+  "codeowners": [],
+  "iot_class": "local_push",
+  "requirements": []
+}
