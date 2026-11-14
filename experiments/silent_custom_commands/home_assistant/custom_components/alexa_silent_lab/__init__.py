@@ -3,6 +3,7 @@ from __future__ import annotations
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 import voluptuous as vol
 from .preview import build_preview
+from .v5_experiment import preview as v5_preview, live as v5_live
 from .request_diagnostic import inspect_request_builders
 from .live import build_live_service_data, TEST_ENTITY
 
@@ -43,6 +44,17 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         return await hass.async_add_executor_job(inspect_request_builders)
 
     hass.services.async_register(DOMAIN, "inspect_request_path", inspect_request_path,
+        supports_response=SupportsResponse.ONLY)
+    async def preview_v5(call: ServiceCall) -> dict:
+        return await hass.async_add_executor_job(v5_preview)
+
+    async def live_v5(call: ServiceCall) -> dict:
+        return await v5_live(hass)
+
+    hass.services.async_register(DOMAIN, "preview_v5", preview_v5,
+        supports_response=SupportsResponse.ONLY)
+    hass.services.async_register(DOMAIN, "live_v5", live_v5,
+        schema=vol.Schema({vol.Required("confirm_live_test"): vol.In([True])}),
         supports_response=SupportsResponse.ONLY)
     hass.services.async_register(DOMAIN, "preview_custom", preview_custom,
         schema=PREVIEW_SCHEMA, supports_response=SupportsResponse.ONLY)
