@@ -51,3 +51,17 @@ inspection of AlexaPy 1.34.0 and transport-mocked serialization tests.
 ```sh
 python -m unittest discover -s experiments/silent_custom_commands/tests -p 'test_lab_preview.py' -v
 ```
+
+## Version 0.3.0: opt-in live suppression candidate
+
+This test targets only `media_player.living_room_echo` and reuses the already installed Alexa Media Player integration; it does **not** replace it. After copying the v0.3.0 lab files, restart Home Assistant and choose **Developer Tools → Actions → Alexa Silent Lab: Live experimental suppression candidate**:
+
+```yaml
+action: alexa_silent_lab.live_candidate
+data:
+  confirm_live_test: true
+```
+
+The candidate calls `media_player.play_media` with `media_content_type: custom`, the 8 a.m. ABBA Amazon Music alarm utterance, and `extra: {suppressResponse: true}`. The key is an **unverified experiment**, not an established Amazon or AlexaPy 1.34.0 feature. The service can fail, be ignored, or speak normally. A returned service response does not prove silence or successful alarm creation. Watch the Echo and verify alarms in the Alexa app. Running twice may create duplicate alarms. Remove test alarms afterwards. No DND or volume manipulation occurs.
+
+A genuine silence result must be repeatable and checked against the baseline, and we must still inspect the exact AlexaPy 1.34.0 serialization before claiming support or proposing an upstream patch.
