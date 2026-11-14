@@ -1,0 +1,19 @@
+preview_custom:
+  name: Preview custom command (offline)
+  description: >-
+    Compare hypothetical Alexa custom-command payloads. Never contacts Amazon
+    or executes a command. The suppression field is unverified.
+  fields:
+    command:
+      name: Command
+      description: Alexa utterance to preview without executing.
+      required: true
+      example: Set an alarm for 1 a.m.
+      selector:
+        text:
+    suppress_response:
+      name: Include experimental suppression flag
+      description: Add an unverified suppressResponse field to the candidate.
+      default: true
+      selector:
+        boolean:
